@@ -1,0 +1,109 @@
+@inject HttpClient Http
+
+<PageTitle>SearchNarutoAPI</PageTitle>
+<main>
+    <h1>Personagens de Naruto</h1>
+    <p>Consulte os personagens da Dattebayo API.</p>
+    <form @onsubmit="Search" @onsubmit:preventDefault>
+        <label for="name">Nome do personagem</label>
+        <input id="name" @bind="name" placeholder="Ex.: Naruto" />
+        <button disabled="@loading">Buscar</button>
+    </form>
+
+    @if (loading)
+    {
+        <p role="status">Carregando personagens...</p>
+    }
+    else if (error is not null)
+    {
+        <p role="alert">@error</p>
+        <button @onclick="Load">Tentar novamente</button>
+    }
+    else
+    {
+        @if (result.Characters.Count == 0)
+        {
+            <p>Nenhum personagem encontrado.</p>
+        }
+        <section class="characters" aria-label="Personagens">
+            @foreach (var character in result.Characters)
+            {
+                <article>
+                    <h2>@character.Name</h2>
+                    @if (character.Images.FirstOrDefault() is { } image)
+                    {
+                        <img src="@image" alt="@character.Name" loading="lazy" />
+                    }
+                    else
+                    {
+                        <p>Imagem não disponível.</p>
+                    }
+                    <p><strong>Clã:</strong> @Character.Display(Character.Field(character.Personal, "clan"))</p>
+                    <p><strong>Afiliação:</strong> @Character.Display(Character.Field(character.Personal, "affiliation"))</p>
+                    <p><strong>Patente ninja:</strong> @Character.Display(Character.Field(character.Rank, "ninjaRank"))</p>
+                    <h3>Jutsus</h3>
+                    @if (character.Jutsu.Count == 0)
+                    {
+                        <p>Não informados.</p>
+                    }
+                    else
+                    {
+                        <ul>
+                            @foreach (var jutsu in character.Jutsu)
+                            {
+                                <li>@jutsu</li>
+                            }
+                        </ul>
+                    }
+                </article>
+            }
+        </section>
+        <nav aria-label="Paginação">
+            <button @onclick="Previous" disabled="@(page == 1)">Anterior</button>
+            <span>Página @(page)</span>
+            <button @onclick="Next" disabled="@(page * PageSize >= result.Total)">Próxima</button>
+        </nav>
+    }
+</main>
+
+@code {
+    private const int PageSize = 10;
+    private string name = "";
+    private string query = "";
+    private int page = 1;
+    private bool loading;
+    private string? error;
+    private CharacterPage result = new();
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Search()
+    {
+        query = name.Trim();
+        page = 1;
+        await Load();
+    }
+
+    private async Task Previous() { page--; await Load(); }
+    private async Task Next() { page++; await Load(); }
+
+    private async Task Load()
+    {
+        loading = true;
+        error = null;
+        try
+        {
+            result = await Http.GetFromJsonAsync<CharacterPage>(
+                $"characters?page={page}&limit={PageSize}&name={Uri.EscapeDataString(query)}")
+                ?? new CharacterPage();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            error = "Não foi possível consultar a API. Verifique sua conexão e tente novamente.";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}
